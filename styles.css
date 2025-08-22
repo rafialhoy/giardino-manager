@@ -188,3 +188,7 @@ footer.muted { text-align: center; margin-top: 10px; }
   border: none; border-radius: 10px; padding: 10px 14px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer;
 }
 .gate-error { color: var(--danger); font-size: 12px; min-height: 16px; }
+/* Ensure the overlay truly hides when the hidden attribute is set */
+.gate-overlay[hidden] { 
+  display: none !important;
+}
