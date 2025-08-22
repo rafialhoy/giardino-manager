@@ -1,0 +1,4 @@
+window.__ENV = {
+  SUPABASE_URL: "https://YOUR-PROJECT-REF.supabase.co",
+  SUPABASE_ANON_KEY: "YOUR-PUBLIC-ANON-KEY"
+};

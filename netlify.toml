@@ -1,0 +1,9 @@
+[build]
+  command = "bash build.sh"
+  publish = "."
+
+# Optional: prevent caching of env.js so changes deploy instantly
+[[headers]]
+  for = "/env.js"
+  [headers.values]
+    Cache-Control = "no-store"

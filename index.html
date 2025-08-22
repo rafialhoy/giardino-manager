@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Restaurant Manager – Minimal KPIs</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app" role="main">
+      <header>
+        <h1>Manager Organization MONA</h1>
+        <div class="muted">il Giardino Pizzeria Trattoria Bar</div>
+      </header>
+
+      <section class="grid" aria-label="Inputs">
+        <div class="card">
+          <div class="row">
+            <label for="date">Date</label>
+            <input id="date" type="date" />
+          </div>
+          <div class="row" style="margin-top: 10px">
+            <label for="sales">Daily Sales (COP)</label>
+            <input
+              id="sales"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              step="1000"
+              placeholder="0"
+            />
+            <div class="preview" id="salesPreview">Formatted: $0</div>
+          </div>
+          <div class="actions" style="margin-top: 12px">
+            <button id="saveBtn" title="Save or update this date">
+              Save / Update Day
+            </button>
+            <button
+              id="clearBtn"
+              class="secondary"
+              title="Clear all saved data"
+            >
+              Reset All Data
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <label>KPIs (based on the selected date)</label>
+            <div class="kpis">
+              <div class="kpi">
+                <h3>Total sales of the week</h3>
+                <div class="val" id="weekTotal">$0</div>
+                <div class="muted" id="weekRange"></div>
+              </div>
+              <div class="kpi">
+                <h3>Total sales of the month</h3>
+                <div class="val" id="monthTotal">$0</div>
+                <div class="muted" id="monthLabel"></div>
+              </div>
+              <div class="kpi" style="grid-column: 1 / -1">
+                <h3>Missing to hit monthly balance (COP $30,000,000)</h3>
+                <div class="val" id="missing">$30,000,000</div>
+                <div class="muted" id="surplusNote"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top: 16px" aria-label="History">
+        <div class="row">
+          <label>Saved days (same month as selected)</label>
+          <ul class="list" id="daysList"></ul>
+        </div>
+      </section>
+
+      <footer class="muted" style="margin-top: 10px; text-align: center">
+        Data is stored locally in your browser. No servers involved.
+      </footer>
+    </main>
+<script src="/env.js"></script>
+<script type="module" src="/app.js"></script>
+  </body>
+  
+</html>
