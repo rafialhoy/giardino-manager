@@ -192,3 +192,39 @@ footer.muted { text-align: center; margin-top: 10px; }
 .gate-overlay[hidden] { 
   display: none !important;
 }
+
+/* Ensure the overlay truly hides when [hidden] is set */
+.gate-overlay[hidden] { 
+  display: none !important;
+}
+
+/* Desktop/iPad sizing & centering */
+@media (min-width: 900px) {
+  body {
+    height: 100svh;             /* lock to viewport */
+    overflow: hidden;           /* no page scroll on large screens */
+    padding: clamp(12px, 2vh, 24px);
+    place-items: center;        /* hard center */
+  }
+
+  .brandbar {
+    position: static;           /* remove sticky offset on desktop */
+    margin-bottom: clamp(6px, 1vh, 12px);
+  }
+
+  .app {
+    width: min(1200px, 96vw);   /* expand a bit on desktop */
+    max-height: calc(100svh - 90px); /* brandbar + padding headroom */
+    overflow: auto;             /* only the card scrolls if it must */
+    padding: clamp(14px, 2.2vh, 24px);
+  }
+
+  header h1 { font-size: clamp(16px, 2.2vh, 20px); }
+  .card { padding: clamp(12px, 1.8vh, 16px); }
+  .kpi .val { font-size: clamp(18px, 2.4vh, 22px); }
+}
+
+/* Slightly wider input/KPI split on big screens */
+@media (min-width: 1100px) {
+  .grid { grid-template-columns: 1.3fr 1fr; }
+}
