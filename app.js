@@ -1,6 +1,6 @@
 /* app.js (module)
    - Password gate (single shared password)
-   - Supabase sync when gate is in "supabase" mode, else local-only
+   - Supabase sync when GATE_MODE="supabase", else local-only
    - Safe date math (Mon→Sun), COP formatting, resilient storage
 */
 
@@ -38,6 +38,7 @@ function showGate() {
   const ov = document.getElementById('gate-overlay');
   if (!ov) return;
   ov.hidden = false;
+
   const input = document.getElementById('gate-pass');
   const btn = document.getElementById('gate-submit');
   const err = document.getElementById('gate-error');
@@ -50,9 +51,10 @@ function showGate() {
     try {
       if (GATE_MODE === 'supabase') {
         if (!HAS_SUPABASE) throw new Error('Supabase not configured');
+        if (!ENV.MANAGER_EMAIL) throw new Error('MANAGER_EMAIL missing in env.js');
         const sb = await ensureSupabase();
         const { error } = await sb.auth.signInWithPassword({
-          email: ENV.MANAGER_EMAIL, // fixed email from env
+          email: ENV.MANAGER_EMAIL,
           password: pass
         });
         if (error) throw error;
@@ -62,6 +64,7 @@ function showGate() {
         const hex = await sha256Hex(pass);
         if (hex !== ENV.PASS_HASH) throw new Error('Invalid password');
       }
+
       ov.hidden = true;
       setUnlocked(true);
       await afterUnlockInit();
@@ -71,19 +74,20 @@ function showGate() {
     }
   }
 
-  btn.onclick = handleSubmit;
-  input.onkeydown = (e) => { if (e.key === 'Enter') handleSubmit(); };
+  if (btn) btn.onclick = handleSubmit;
+  if (input) input.onkeydown = (e) => { if (e.key === 'Enter') handleSubmit(); };
   setTimeout(() => input?.focus(), 50);
 }
 
 async function afterUnlockInit() {
   // Default date if empty
-  if (!document.getElementById('date').value) {
+  const dateInput = document.getElementById('date');
+  if (dateInput && !dateInput.value) {
     const d = new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const z = String(d.getDate()).padStart(2, '0');
-    document.getElementById('date').value = `${y}-${m}-${z}`;
+    dateInput.value = `${y}-${m}-${z}`;
   }
   await refreshForSelectedDate();
 
@@ -94,7 +98,7 @@ async function afterUnlockInit() {
   }
 }
 
-/* Boot: if session is valid & previously unlocked, go in; else show gate */
+/* Boot */
 (async function boot() {
   if (GATE_MODE === 'supabase') {
     await ensureSupabase();
@@ -114,12 +118,11 @@ async function afterUnlockInit() {
 })();
 
 /* ====== Utilities ====== */
-const COP = new Intl.NumberFormat('la-CO' in Intl.NumberFormat.supportedLocalesOf ? 'la-CO' : 'es-CO', {
+const COP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
   maximumFractionDigits: 0
 });
-
 const fmtCOP = (n) => COP.format(Math.max(0, Math.round(Number(n) || 0)));
 
 const todayLocalYYYYMMDD = () => {
@@ -287,7 +290,7 @@ const elDate        = document.getElementById('date');
 const elSales       = document.getElementById('sales');
 const elPreview     = document.getElementById('salesPreview');
 const elSave        = document.getElementById('saveBtn');
-const elClear       = document.getElementById('clearBtn');
+const elClear       = document.getElementById('clearBtn'); // optional/may not exist
 const elWeekTotal   = document.getElementById('weekTotal');
 const elWeekRange   = document.getElementById('weekRange');
 const elMonthTotal  = document.getElementById('monthTotal');
@@ -298,7 +301,7 @@ const elDaysList    = document.getElementById('daysList');
 
 /* ====== KPIs + List rendering ====== */
 async function refreshForSelectedDate() {
-  const dateStr  = elDate.value || todayLocalYYYYMMDD();
+  const dateStr  = elDate?.value || todayLocalYYYYMMDD();
   const selected = parseYYYYMMDD(dateStr);
 
   // Hydrate month cache from provider
@@ -308,30 +311,30 @@ async function refreshForSelectedDate() {
   const [wStart, wEnd] = weekBounds(selected);
   const weekLogs = await provider.listBetween(wStart, wEnd);
   const weekSum = weekLogs.reduce((a, r) => a + r.sales, 0);
-  elWeekTotal.textContent = fmtCOP(weekSum);
-  elWeekRange.textContent = `${wStart.toLocaleDateString('en-CA')} → ${wEnd.toLocaleDateString('en-CA')}`;
+  if (elWeekTotal) elWeekTotal.textContent = fmtCOP(weekSum);
+  if (elWeekRange) elWeekRange.textContent = `${wStart.toLocaleDateString('en-CA')} → ${wEnd.toLocaleDateString('en-CA')}`;
 
   // Month totals
   const mStart = startOfMonth(selected);
   const mEnd   = endOfMonth(selected);
   const monthLogs = await provider.listBetween(mStart, mEnd);
   const monthSum = monthLogs.reduce((a, r) => a + r.sales, 0);
-  elMonthTotal.textContent = fmtCOP(monthSum);
-  elMonthLabel.textContent = selected.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  if (elMonthTotal) elMonthTotal.textContent = fmtCOP(monthSum);
+  if (elMonthLabel) elMonthLabel.textContent = selected.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   // Monthly target (fixed)
   const target  = 30000000; // COP
   const missing = Math.max(0, target - monthSum);
-  elMissing.textContent = fmtCOP(missing);
-  elSurplusNote.textContent = monthSum > target ? `Goal reached. Surplus: ${fmtCOP(monthSum - target)}` : '';
+  if (elMissing) elMissing.textContent = fmtCOP(missing);
+  if (elSurplusNote) elSurplusNote.textContent = monthSum > target ? `Goal reached. Surplus: ${fmtCOP(monthSum - target)}` : '';
 
   // Month list
   renderMonthList(selected, provider.monthCache);
 
   // Input hydration for the selected day
   const existing = provider.monthCache[dateStr];
-  elSales.value = existing != null ? Number(existing) : '';
-  elPreview.textContent = `Formatted: ${fmtCOP(elSales.value || 0)}`;
+  if (elSales) elSales.value = existing != null ? Number(existing) : '';
+  if (elPreview) elPreview.textContent = `Formatted: ${fmtCOP(elSales?.value || 0)}`;
 }
 
 function renderMonthList(selected, store) {
@@ -340,6 +343,7 @@ function renderMonthList(selected, store) {
     .filter(([k]) => yearMonthKey(parseYYYYMMDD(k)) === mKey)
     .sort((a, b) => (a[0] < b[0] ? -1 : 1));
 
+  if (!elDaysList) return;
   elDaysList.innerHTML = '';
   if (items.length === 0) {
     const li = document.createElement('li');
@@ -364,9 +368,9 @@ function renderMonthList(selected, store) {
     editBtn.className = 'link';
     editBtn.textContent = 'Edit';
     editBtn.onclick = () => {
-      elDate.value = k;
-      elSales.value = Number(v);
-      elSales.dispatchEvent(new Event('input'));
+      if (elDate) elDate.value = k;
+      if (elSales) elSales.value = Number(v);
+      if (elSales) elSales.dispatchEvent(new Event('input'));
       refreshForSelectedDate();
     };
 
@@ -388,35 +392,42 @@ function renderMonthList(selected, store) {
   }
 }
 
-/* ====== Events ====== */
-elSales.addEventListener('input', () => {
-  elPreview.textContent = `Formatted: ${fmtCOP(elSales.value || 0)}`;
-});
+/* ====== Events (guard every binding) ====== */
+if (elSales) {
+  elSales.addEventListener('input', () => {
+    if (elPreview) elPreview.textContent = `Formatted: ${fmtCOP(elSales.value || 0)}`;
+  });
+}
 
-elDate.addEventListener('change', () => {
-  refreshForSelectedDate();
-});
+if (elDate) {
+  elDate.addEventListener('change', () => {
+    refreshForSelectedDate();
+  });
+}
 
-elSave.addEventListener('click', async () => {
-  const dateStr = elDate.value;
-  const amt = Math.round(Number(elSales.value));
-  if (!dateStr) { alert('Please select a date.'); elDate.focus(); return; }
-  if (!(amt >= 0)) { alert('Please enter a valid non-negative amount.'); elSales.focus(); return; }
-  await provider.upsert(dateStr, amt);
-  await refreshForSelectedDate();
-});
+if (elSave) {
+  elSave.addEventListener('click', async () => {
+    const dateStr = elDate?.value;
+    const amt = Math.round(Number(elSales?.value));
+    if (!dateStr) { alert('Please select a date.'); elDate?.focus(); return; }
+    if (!(amt >= 0)) { alert('Please enter a valid non-negative amount.'); elSales?.focus(); return; }
+    await provider.upsert(dateStr, amt);
+    await refreshForSelectedDate();
+  });
+}
 
-elClear.addEventListener('click', async () => {
-  if (provider.mode === 'supabase') {
-    // In cloud mode, don't mass-delete remote history from a single button.
-    if (confirm('Clear local cache only? (Your cloud data stays intact)')) {
-      localStorage.removeItem(LOCAL_KEY);
-      await refreshForSelectedDate();
+if (elClear) {
+  elClear.addEventListener('click', async () => {
+    if (provider.mode === 'supabase') {
+      if (confirm('Clear local cache only? (Your cloud data stays intact)')) {
+        localStorage.removeItem(LOCAL_KEY);
+        await refreshForSelectedDate();
+      }
+    } else {
+      if (confirm('This will remove ALL saved data in this browser. Continue?')) {
+        localStorage.removeItem(LOCAL_KEY);
+        await refreshForSelectedDate();
+      }
     }
-  } else {
-    if (confirm('This will remove ALL saved data in this browser. Continue?')) {
-      localStorage.removeItem(LOCAL_KEY);
-      await refreshForSelectedDate();
-    }
-  }
-});
+  });
+}
