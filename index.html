@@ -2,26 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
     <title>Il Giardino • M.O.N.A</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <!-- Blocking Password Gate -->
-<div id="gate-overlay" class="gate-overlay" aria-modal="true" role="dialog" hidden>
-  <div class="gate-modal">
-    <h2 class="gate-title">Ingresar Contraseña</h2>
-    <p class="gate-sub">Plataforma restringida para el personal.</p>
-    <input id="gate-pass" type="password" placeholder="Password" autocomplete="current-password" />
-    <button id="gate-submit">Ingresar</button>
-    <div id="gate-error" class="gate-error" aria-live="polite"></div>
-  </div>
-</div>
-<div class="brandbar">
-  <img src="/img/logo-giardino.png" alt="Il Giardino logo" />
-  <div class="title">Il Giardino • M.O.N.A</div>
-  <div class="sub">Manager’s Operations & Numbers App</div>
-</div>
+    <div
+      id="gate-overlay"
+      class="gate-overlay"
+      aria-modal="true"
+      role="dialog"
+      hidden
+    >
+      <div class="gate-modal">
+        <h2 class="gate-title">Ingresar Contraseña</h2>
+        <p class="gate-sub">Plataforma restringida para el personal.</p>
+        <input
+          id="gate-pass"
+          type="password"
+          placeholder="Password"
+          autocomplete="current-password"
+        />
+        <button id="gate-submit">Ingresar</button>
+        <div id="gate-error" class="gate-error" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div class="brandbar">
+      <img src="/img/logo-giardino.png" alt="Il Giardino logo" />
+      <div class="title">Il Giardino • M.O.N.A</div>
+      <div class="sub">Manager’s Operations & Numbers App</div>
+    </div>
 
     <main class="app" role="main">
       <header>
@@ -85,12 +99,12 @@
         </div>
       </section>
 
-      <footer class="muted" style="margin-top: 10px; text-align: center">
-
-      </footer>
+      <footer
+        class="muted"
+        style="margin-top: 10px; text-align: center"
+      ></footer>
     </main>
-<script src="/env.js"></script>
-<script type="module" src="/app.js"></script>
+    <script src="/env.js"></script>
+    <script type="module" src="/app.js"></script>
   </body>
-  
 </html>

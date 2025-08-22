@@ -80,6 +80,10 @@ function showGate() {
       ov.hidden = true;
       ov.style.display = "none";
 
+      // important: blur to release iOS zoom focus, then reset scroll
+input.blur();
+setTimeout(() => { window.scrollTo(0, 0); }, 0);
+
       await afterUnlockInit();
     } catch (e) {
       err.textContent = e.message || "Authentication failed";
