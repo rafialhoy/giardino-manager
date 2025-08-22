@@ -7,6 +7,22 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
+    <!-- Blocking Password Gate -->
+<div id="gate-overlay" class="gate-overlay" aria-modal="true" role="dialog" hidden>
+  <div class="gate-modal">
+    <h2 class="gate-title">Enter Password</h2>
+    <p class="gate-sub">This app is restricted to managers/owners.</p>
+    <input id="gate-pass" type="password" placeholder="Password" autocomplete="current-password" />
+    <button id="gate-submit">Unlock</button>
+    <div id="gate-error" class="gate-error" aria-live="polite"></div>
+  </div>
+</div>
+<div class="brandbar">
+  <img src="./logo-giardino.png" alt="Il Giardino logo" />
+  <div class="title">Il Giardino • Manager</div>
+  <div class="sub">Today’s performance at a glance</div>
+</div>
+
     <main class="app" role="main">
       <header>
         <h1>Manager Organization MONA</h1>
