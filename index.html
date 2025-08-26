@@ -1,219 +1,337 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>M.O.N.A • Admin</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <link rel="stylesheet" href="./styles.css">
-</head>
-<body>
+  <head>
+    <meta charset="utf-8" />
+    <title>M.O.N.A • Admin</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <link rel="stylesheet" href="./styles.css" />
 
-  <!-- Brand bar -->
-  <div class="brandbar">
-    <img src="/img/logo-giardino.png" alt="Il Giardino logo" />
-    <div class="title">Il Giardino • Admin</div>
-    <div class="sub">Dashboard & Carga</div>
-  </div>
+    <link
+      rel="icon"
+      type="image/png"
+      href="/icons/favicon-96x96.png"
+      sizes="96x96"
+    />
+    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+    <link rel="shortcut icon" href="/icons/favicon.ico" />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/icons/apple-touch-icon.png"
+    />
+    <meta name="apple-mobile-web-app-title" content="Giardino" />
+    <link rel="manifest" href="/icons/site.webmanifest" />
+  </head>
+  <body>
+    <!-- Brand bar -->
+    <div class="brandbar">
+      <img src="/img/logo-giardino.png" alt="Il Giardino logo" />
+      <div class="title">Il Giardino • Admin</div>
+      <div class="sub">Dashboard & Carga</div>
+    </div>
 
-  <main class="app">
-    <header>
-      <h1>M.O.N.A Admin</h1>
-      <div class="actions">
-        <button id="tabDashboard" class="secondary">Dashboard</button>
-        <button id="tabCarga" class="secondary">Cargar datos</button>
-      </div>
-    </header>
-
-    <!-- ========= DASHBOARD ========= -->
-    <section id="viewDashboard" data-view="dashboard" class="stack">
-      <!-- Alertas: ahora va ARRIBA -->
-      <div class="card" id="alertBox" style="display:none">
-        <div class="row">
-          <strong>⚠️ Alerta de proyección</strong>
-          <small id="alertText" class="muted"></small>
+    <main class="app">
+      <header>
+        <h1>M.O.N.A Admin</h1>
+        <div class="actions">
+          <button id="tabDashboard" class="secondary">Dashboard</button>
+          <button id="tabCarga" class="secondary">Cargar datos</button>
         </div>
-      </div>
+      </header>
 
-      <!-- Rango -->
-      <div class="card">
-        <div class="row">
-          <label>Rango de fechas</label>
-          <div class="actions">
-            <input id="rangeStart" type="date" />
-            <input id="rangeEnd" type="date" />
-            <button id="applyRangeBtn">Aplicar</button>
-            <span class="muted" id="rangeHint"></span>
+      <!-- ========= DASHBOARD ========= -->
+      <section id="viewDashboard" data-view="dashboard" class="stack">
+        <!-- Alertas: ahora va ARRIBA -->
+        <div class="card" id="alertBox" style="display: none">
+          <div class="row">
+            <strong>⚠️ Alerta de proyección</strong>
+            <small id="alertText" class="muted"></small>
           </div>
         </div>
-      </div>
 
-<!-- Tablero (KPIs) -->
-<div class="card">
-  <!-- Encabezado del tablero con botón de settings -->
-  <div class="row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom: 20px;">
-    <h3 style="margin:0;font-size:14px">Tablero (rango seleccionado)</h3>
-    <button id="openSettings" class="icon-btn" type="button" title="Configurar metas">⚙️</button>
-  </div>
-
-  <div class="row">
-    <div class="kpis">
-      <div class="kpi">
-        <h3>Total del rango</h3>
-        <div class="val" id="kpiTotal">$ 0</div>
-      </div>
-
-      <div class="kpi">
-        <h3>Metas</h3>
-        <div class="val" id="kpiTargets">
-          <h3 class="tight">Equilibrio: <span id="kpiEquilibrio">$ 0</span></h3>
-          <h3 class="tight">Ganancia: <span id="kpiGanancia">$ 0</span></h3>
-        </div>
-      </div>
-
-      <div class="kpi">
-        <h3>Promedio por día</h3>
-        <div class="val" id="kpiAvgDay">$ 0</div>
-      </div>
-
-      <div class="kpi">
-        <h3>Promedio por semana</h3>
-        <div class="val" id="kpiAvgWeek">$ 0</div>
-      </div>
-
-      <div class="kpi">
-        <h3>Efectivo</h3>
-        <div class="val" id="kpiCash">$ 0 (0%)</div>
-      </div>
-      <div class="kpi">
-        <h3>Tarjeta</h3>
-        <div class="val" id="kpiCard">$ 0 (0%)</div>
-      </div>
-      <div class="kpi">
-        <h3>Transferencia</h3>
-        <div class="val" id="kpiTrans">$ 0 (0%)</div>
-      </div>
-      <div class="kpi">
-        <h3>Plataformas</h3>
-        <div class="val" id="kpiPlat">$ 0 (0%)</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-      <!-- Ventas por meses -->
-      <div class="card">
-        <div class="row">
-          <h3 style="margin:0 0 6px;font-size:14px">Ventas por meses</h3>
-          <div class="preview" id="monthsHint">Últimos meses + mes actual</div>
-          <div style="overflow:auto">
-            <table style="width:100%; border-collapse:collapse; margin-top:8px;">
-              <thead>
-                <tr style="text-align:left; border-bottom:1px solid var(--border);">
-                  <th style="padding:8px 6px;">Mes</th>
-                  <th style="padding:8px 6px;">Ventas totales</th>
-                  <th style="padding:8px 6px;">Meta</th>
-                  <th style="padding:8px 6px;">Ganancias (Surplus)</th>
-                </tr>
-              </thead>
-              <tbody id="monthsTableBody"></tbody>
-            </table>
+        <!-- Rango -->
+        <div class="card">
+          <div class="row">
+            <label>Rango de fechas</label>
+            <div class="actions">
+              <input id="rangeStart" type="date" />
+              <input id="rangeEnd" type="date" />
+              <button id="applyRangeBtn">Aplicar</button>
+              <span class="muted" id="rangeHint"></span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Lista por días -->
-      <div class="card">
+        <!-- Tablero (KPIs) -->
+        <div class="card">
+          <!-- Encabezado del tablero con botón de settings -->
+          <div
+            class="row"
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 20px;
+            "
+          >
+            <h3 style="margin: 0; font-size: 14px">
+              Tablero (rango seleccionado)
+            </h3>
+            <button
+              id="openSettings"
+              class="icon-btn"
+              type="button"
+              title="Configurar metas"
+            >
+              ⚙️
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="kpis">
+              <div class="kpi">
+                <h3>Total del rango</h3>
+                <div class="val" id="kpiTotal">$ 0</div>
+              </div>
+
+              <div class="kpi">
+                <h3>Metas</h3>
+                <div class="val" id="kpiTargets">
+                  <h3 class="tight">
+                    Equilibrio: <span id="kpiEquilibrio">$ 0</span>
+                  </h3>
+                  <h3 class="tight">
+                    Ganancia: <span id="kpiGanancia">$ 0</span>
+                  </h3>
+                </div>
+              </div>
+
+              <div class="kpi">
+                <h3>Promedio por día</h3>
+                <div class="val" id="kpiAvgDay">$ 0</div>
+              </div>
+
+              <div class="kpi">
+                <h3>Promedio por semana</h3>
+                <div class="val" id="kpiAvgWeek">$ 0</div>
+              </div>
+
+              <div class="kpi">
+                <h3>Efectivo</h3>
+                <div class="val" id="kpiCash">$ 0 (0%)</div>
+              </div>
+              <div class="kpi">
+                <h3>Tarjeta</h3>
+                <div class="val" id="kpiCard">$ 0 (0%)</div>
+              </div>
+              <div class="kpi">
+                <h3>Transferencia</h3>
+                <div class="val" id="kpiTrans">$ 0 (0%)</div>
+              </div>
+              <div class="kpi">
+                <h3>Plataformas</h3>
+                <div class="val" id="kpiPlat">$ 0 (0%)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ventas por meses -->
+        <div class="card">
+          <div class="row">
+            <h3 style="margin: 0 0 6px; font-size: 14px">Ventas por meses</h3>
+            <div class="preview" id="monthsHint">
+              Últimos meses + mes actual
+            </div>
+            <div style="overflow: auto">
+              <table
+                style="width: 100%; border-collapse: collapse; margin-top: 8px"
+              >
+                <thead>
+                  <tr
+                    style="
+                      text-align: left;
+                      border-bottom: 1px solid var(--border);
+                    "
+                  >
+                    <th style="padding: 8px 6px">Mes</th>
+                    <th style="padding: 8px 6px">Ventas totales</th>
+                    <th style="padding: 8px 6px">Meta</th>
+                    <th style="padding: 8px 6px">Ganancias (Surplus)</th>
+                  </tr>
+                </thead>
+                <tbody id="monthsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lista por días -->
+        <div class="card">
+          <div class="row">
+            <h3 style="margin: 0 0 6px; font-size: 14px">
+              Ingresos por día (en el rango)
+            </h3>
+            <ul class="list" id="daysList"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========= CARGA (ADMIN) ========= -->
+      <section
+        id="viewCarga"
+        data-view="carga"
+        class="stack"
+        style="display: none"
+      >
+        <div class="card">
+          <div class="row" style="margin-bottom: 12px">
+            <h3 style="margin: 0 0 6px; font-size: 14px">
+              Ingresar datos desglosados
+            </h3>
+            <p class="muted" style="margin: 0">
+              Seleccione la fecha, el empleado y registre ventas por canal. El
+              total se calcula automáticamente.
+            </p>
+          </div>
+
+          <div class="row">
+            <label for="adm-date">Fecha</label>
+            <input id="adm-date" type="date" required />
+          </div>
+
+          <div class="row" style="margin-top: 10px">
+            <label for="adm-employee">Empleado(a)</label>
+            <select
+              id="adm-employee"
+              required
+              style="
+                padding: 10px;
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                font-size: 16px;
+              "
+            >
+              <option value="" disabled selected>Selecciona</option>
+            </select>
+            <small class="muted">Incluye a la dueña.</small>
+          </div>
+
+          <div class="row" style="margin-top: 10px">
+            <label>Ventas por canal (COP)</label>
+            <input
+              id="adm-cash"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              placeholder="Efectivo"
+            />
+            <input
+              id="adm-card"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              placeholder="Tarjeta"
+            />
+            <input
+              id="adm-transfer"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              placeholder="Transferencia"
+            />
+            <input
+              id="adm-platforms"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              placeholder="Plataformas"
+            />
+            <div class="preview" id="adm-total-preview">Total: $ 0</div>
+          </div>
+
+          <!-- Días faltantes del mes (excepto lunes) -->
+          <div class="row" style="margin-top: 10px">
+            <label>Días faltantes del mes</label>
+            <div id="adm-missing" class="chips"></div>
+            <small class="muted">Toca un día para autollenar la fecha.</small>
+          </div>
+
+          <div class="actions" style="margin-top: 12px">
+            <button id="adm-saveBtn">Guardar</button>
+            <span class="muted" id="adm-statusMsg"></span>
+          </div>
+        </div>
+      </section>
+
+      <footer class="muted" style="margin-top: 16px">
+        Desarrollado para Il Giardino Trattoria Pizzeria S.A.S.
+      </footer>
+    </main>
+
+    <!-- Gate (clave admin) -->
+    <div id="gate-overlay" class="gate-overlay" aria-modal="true" role="dialog">
+      <div class="gate-modal">
+        <h2 class="gate-title">Acceso Admin</h2>
+        <p class="gate-sub">Ingresa la clave para continuar.</p>
+        <input
+          id="gate-pass"
+          type="password"
+          placeholder="Clave"
+          autocomplete="off"
+        />
+        <button id="gate-submit" type="button">Ingresar</button>
+        <div id="gate-error" class="gate-error" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <!-- Modal de Configuración de Metas (reusa estilos del gate) -->
+    <div
+      id="settings-overlay"
+      class="gate-overlay"
+      hidden
+      aria-modal="true"
+      role="dialog"
+    >
+      <div class="gate-modal">
+        <h2 class="gate-title">Configurar metas</h2>
+
         <div class="row">
-          <h3 style="margin:0 0 6px;font-size:14px">Ingresos por día (en el rango)</h3>
-          <ul class="list" id="daysList"></ul>
+          <label for="inp-equilibrio">Meta de Equilibrio (COP)</label>
+          <input
+            id="inp-equilibrio"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            placeholder="30000000"
+          />
         </div>
+
+        <div class="row" style="margin-top: 8px">
+          <label for="inp-ganancia">Meta de Ganancia (COP)</label>
+          <input
+            id="inp-ganancia"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            placeholder="0"
+          />
+        </div>
+
+        <div class="actions" style="margin-top: 12px">
+          <button id="btn-cancel-settings" class="secondary" type="button">
+            Cancelar
+          </button>
+          <button id="btn-save-settings" type="button">Guardar</button>
+        </div>
+        <div id="settings-error" class="gate-error" aria-live="polite"></div>
       </div>
-    </section>
-
-    <!-- ========= CARGA (ADMIN) ========= -->
-    <section id="viewCarga" data-view="carga" class="stack" style="display:none">
-      <div class="card">
-        <div class="row" style="margin-bottom:12px">
-          <h3 style="margin:0 0 6px;font-size:14px">Ingresar datos desglosados</h3>
-          <p class="muted" style="margin:0">Seleccione la fecha, el empleado y registre ventas por canal. El total se calcula automáticamente.</p>
-        </div>
-
-        <div class="row">
-          <label for="adm-date">Fecha</label>
-          <input id="adm-date" type="date" required />
-        </div>
-
-        <div class="row" style="margin-top:10px">
-          <label for="adm-employee">Empleado(a)</label>
-          <select id="adm-employee" required style="padding:10px;border:1px solid var(--border);border-radius:10px;font-size:16px;">
-            <option value="" disabled selected>Selecciona</option>
-          </select>
-          <small class="muted">Incluye a la dueña.</small>
-        </div>
-
-        <div class="row" style="margin-top:10px">
-          <label>Ventas por canal (COP)</label>
-          <input id="adm-cash"      type="number" inputmode="numeric" min="0" placeholder="Efectivo" />
-          <input id="adm-card"      type="number" inputmode="numeric" min="0" placeholder="Tarjeta" />
-          <input id="adm-transfer"  type="number" inputmode="numeric" min="0" placeholder="Transferencia" />
-          <input id="adm-platforms" type="number" inputmode="numeric" min="0" placeholder="Plataformas" />
-          <div class="preview" id="adm-total-preview">Total: $ 0</div>
-        </div>
-
-        <!-- Días faltantes del mes (excepto lunes) -->
-        <div class="row" style="margin-top:10px">
-          <label>Días faltantes del mes</label>
-          <div id="adm-missing" class="chips"></div>
-          <small class="muted">Toca un día para autollenar la fecha.</small>
-        </div>
-
-        <div class="actions" style="margin-top:12px">
-          <button id="adm-saveBtn">Guardar</button>
-          <span class="muted" id="adm-statusMsg"></span>
-        </div>
-      </div>
-    </section>
-
-    <footer class="muted" style="margin-top:16px">Desarrollado para Il Giardino Trattoria Pizzeria S.A.S.</footer>
-  </main>
-
-  <!-- Gate (clave admin) -->
-  <div id="gate-overlay" class="gate-overlay" aria-modal="true" role="dialog">
-    <div class="gate-modal">
-      <h2 class="gate-title">Acceso Admin</h2>
-      <p class="gate-sub">Ingresa la clave para continuar.</p>
-      <input id="gate-pass" type="password" placeholder="Clave" autocomplete="off" />
-      <button id="gate-submit" type="button">Ingresar</button>
-      <div id="gate-error" class="gate-error" aria-live="polite"></div>
-    </div>
-  </div>
-
-  <!-- Modal de Configuración de Metas (reusa estilos del gate) -->
-<div id="settings-overlay" class="gate-overlay" hidden aria-modal="true" role="dialog">
-  <div class="gate-modal">
-    <h2 class="gate-title">Configurar metas</h2>
-
-    <div class="row">
-      <label for="inp-equilibrio">Meta de Equilibrio (COP)</label>
-      <input id="inp-equilibrio" type="number" inputmode="numeric" min="0" placeholder="30000000" />
     </div>
 
-    <div class="row" style="margin-top:8px;">
-      <label for="inp-ganancia">Meta de Ganancia (COP)</label>
-      <input id="inp-ganancia" type="number" inputmode="numeric" min="0" placeholder="0" />
-    </div>
-
-    <div class="actions" style="margin-top:12px">
-      <button id="btn-cancel-settings" class="secondary" type="button">Cancelar</button>
-      <button id="btn-save-settings" type="button">Guardar</button>
-    </div>
-    <div id="settings-error" class="gate-error" aria-live="polite"></div>
-  </div>
-</div>
-
-
-  <script src="./env.js"></script>
-  <script type="module" src="./app.js"></script>
-</body>
+    <script src="./env.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
 </html>

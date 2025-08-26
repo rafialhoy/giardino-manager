@@ -1,83 +1,141 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>Reporte Diario • Il Giardino</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <link rel="stylesheet" href="./styles.css">
-</head>
-<body>
-
-  <!-- Brand bar -->
-  <div class="brandbar">
-    <img src="/img/logo-giardino.png" alt="Il Giardino logo" />
-    <div class="title">Il Giardino • Reporte Diario</div>
-    <div class="sub">Empleados</div>
-  </div>
-
-  <main class="app">
-    <header>
-      <h1>Enviar Reporte del Día</h1>
-      <small class="muted">Versión empleados</small>
-    </header>
-
-    <!-- Una sola columna / un solo panel -->
-    <section>
-      <div class="card">
-        <!-- Instrucciones arriba del formulario -->
-        <div class="row" style="margin-bottom:12px">
-          <h3 style="margin:0 0 6px;font-size:14px">Instrucciones</h3>
-          <p class="muted" style="margin:0">
-            Ingresa los valores por canal. No agregues simbolos, puntos, ni comas. El total se calcula automáticamente.
-            Si ya existe un reporte para la fecha, se actualizará.
-          </p>
-        </div>
-
-        <!-- Formulario -->
-        <div class="row">
-          <label for="rep-date">Fecha</label>
-          <input id="rep-date" type="date" required />
-        </div>
-
-        <div class="row" style="margin-top:10px">
-          <label for="rep-employee">Empleado(a)</label>
-          <select id="rep-employee" required style="padding:10px;border:1px solid var(--border);border-radius:10px;font-size:16px;">
-            <option value="" disabled selected>Selecciona tu nombre</option>
-          </select>
-        </div>
-
-        <div class="row" style="margin-top:10px">
-          <label>Ventas por canal (COP)</label>
-          <input id="in-cash"      type="number" inputmode="numeric" min="0" placeholder="Efectivo" />
-          <input id="in-card"      type="number" inputmode="numeric" min="0" placeholder="Tarjeta" />
-          <input id="in-transfer"  type="number" inputmode="numeric" min="0" placeholder="Transferencia" />
-          <input id="in-platforms" type="number" inputmode="numeric" min="0" placeholder="Plataformas" />
-          <div class="preview" id="total-preview">Total: $ 0</div>
-        </div>
-
-        <div class="actions" style="margin-top:12px">
-          <button id="sendBtn">Enviar reporte</button>
-          <span class="muted" id="statusMsg"></span>
-        </div>
-      </div>
-    </section>
-
-    <footer class="muted" style="margin-top:16px">Si cometiste un error, vuelve a enviar el reporte con la misma fecha para actualizarlo.</footer>
-  </main>
-
-  <!-- Gate (clave de empleados) -->
-  <div id="gate-overlay" class="gate-overlay" aria-modal="true" role="dialog">
-    <div class="gate-modal">
-      <h2 class="gate-title">Clave de Empleados</h2>
-      <p class="gate-sub">Ingresa la clave compartida para continuar.</p>
-      <input id="gate-pass" type="password" placeholder="Clave" autocomplete="off" />
-      <button id="gate-submit">Ingresar</button>
-      <div id="gate-error" class="gate-error" aria-live="polite"></div>
+  <head>
+    <meta charset="utf-8" />
+    <title>Reporte Diario • Il Giardino</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <link
+      rel="icon"
+      type="image/png"
+      href="/icons/favicon-96x96.png"
+      sizes="96x96"
+    />
+    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+    <link rel="shortcut icon" href="/icons/favicon.ico" />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/icons/apple-touch-icon.png"
+    />
+    <meta name="apple-mobile-web-app-title" content="Giardino" />
+    <link rel="manifest" href="/icons/site.webmanifest" />
+  </head>
+  <body>
+    <!-- Brand bar -->
+    <div class="brandbar">
+      <img src="/img/logo-giardino.png" alt="Il Giardino logo" />
+      <div class="title">Il Giardino • Reporte Diario</div>
+      <div class="sub">Empleados</div>
     </div>
-  </div>
 
-  <script src="./env.js"></script>
-  <script type="module" src="./reporte.js"></script>
-</body>
+    <main class="app">
+      <header>
+        <h1>Enviar Reporte del Día</h1>
+        <small class="muted">Versión empleados</small>
+      </header>
+
+      <!-- Una sola columna / un solo panel -->
+      <section>
+        <div class="card">
+          <!-- Instrucciones arriba del formulario -->
+          <div class="row" style="margin-bottom: 12px">
+            <h3 style="margin: 0 0 6px; font-size: 14px">Instrucciones</h3>
+            <p class="muted" style="margin: 0">
+              Ingresa los valores por canal. No agregues simbolos, puntos, ni
+              comas. El total se calcula automáticamente. Si ya existe un
+              reporte para la fecha, se actualizará.
+            </p>
+          </div>
+
+          <!-- Formulario -->
+          <div class="row">
+            <label for="rep-date">Fecha</label>
+            <input id="rep-date" type="date" required />
+          </div>
+
+          <div class="row" style="margin-top: 10px">
+            <label for="rep-employee">Empleado(a)</label>
+            <select
+              id="rep-employee"
+              required
+              style="
+                padding: 10px;
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                font-size: 16px;
+              "
+            >
+              <option value="" disabled selected>Selecciona tu nombre</option>
+            </select>
+          </div>
+
+          <div class="row" style="margin-top: 10px">
+            <label>Ventas por canal (COP)</label>
+            <input
+              id="in-cash"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              placeholder="Efectivo"
+            />
+            <input
+              id="in-card"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              placeholder="Tarjeta"
+            />
+            <input
+              id="in-transfer"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              placeholder="Transferencia"
+            />
+            <input
+              id="in-platforms"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              placeholder="Plataformas"
+            />
+            <div class="preview" id="total-preview">Total: $ 0</div>
+          </div>
+
+          <div class="actions" style="margin-top: 12px">
+            <button id="sendBtn">Enviar reporte</button>
+            <span class="muted" id="statusMsg"></span>
+          </div>
+        </div>
+      </section>
+
+      <footer class="muted" style="margin-top: 16px">
+        Si cometiste un error, vuelve a enviar el reporte con la misma fecha
+        para actualizarlo.
+      </footer>
+    </main>
+
+    <!-- Gate (clave de empleados) -->
+    <div id="gate-overlay" class="gate-overlay" aria-modal="true" role="dialog">
+      <div class="gate-modal">
+        <h2 class="gate-title">Clave de Empleados</h2>
+        <p class="gate-sub">Ingresa la clave compartida para continuar.</p>
+        <input
+          id="gate-pass"
+          type="password"
+          placeholder="Clave"
+          autocomplete="off"
+        />
+        <button id="gate-submit">Ingresar</button>
+        <div id="gate-error" class="gate-error" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <script src="./env.js"></script>
+    <script type="module" src="./reporte.js"></script>
+  </body>
 </html>
-
