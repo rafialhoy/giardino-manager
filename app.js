@@ -1,14 +1,10 @@
-/* app.js (module)
-   - Password gate (single shared password)
-   - Supabase sync only when logged in; otherwise local-only
-   - Hidden-overlay fix: use hidden + display
-   - Safe date math (Mon→Sun), COP formatting, resilient storage
-*/
+/* app.js (Admin SPA: Dashboard + Carga) */
 
-/* ===== Env & optional Supabase client ===== */
+/* ===== Env & Supabase ===== */
 const ENV = window.__ENV ?? {};
-const GATE_MODE = (ENV.GATE_MODE || "supabase").toLowerCase(); // 'supabase' | 'hash'
+const GATE_MODE = (ENV.GATE_MODE || "supabase").toLowerCase();
 const HAS_SUPABASE = Boolean(ENV.SUPABASE_URL && ENV.SUPABASE_ANON_KEY);
+const ADMIN_EMAIL = (window.__ENV?.MANAGER_EMAIL || "bellingrodtsimona@gmail.com");
 
 let supabase = null;
 let signedInUser = null;
@@ -24,108 +20,539 @@ async function ensureSupabase() {
   return supabase;
 }
 
-/* ===== Small helpers ===== */
+/* ===== Helpers ===== */
 async function sha256Hex(s) {
   const enc = new TextEncoder().encode(s);
   const buf = await crypto.subtle.digest("SHA-256", enc);
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
 }
+function isUnlocked(){ try { return localStorage.getItem("gate_unlock_v1")==="1"; } catch { return false; } }
+function setUnlocked(v){ try { localStorage.setItem("gate_unlock_v1", v ? "1" : "0"); } catch {} }
+function hideGateOverlay(){ const ov=document.getElementById("gate-overlay"); if (ov){ ov.hidden=true; ov.style.display="none"; } }
 
-function isUnlocked() {
-  try { return localStorage.getItem("gate_unlock_v1") === "1"; } catch { return false; }
-}
-function setUnlocked(v) {
-  try { localStorage.setItem("gate_unlock_v1", v ? "1" : "0"); } catch {}
-}
+const COP = new Intl.NumberFormat("es-CO",{ style:"currency", currency:"COP", maximumFractionDigits:0 });
+const fmtCOP = (n) => COP.format(Math.max(0, Math.round(Number(n)||0)));
 
-/* ===== Password gate (blocks UI until unlocked) ===== */
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+const parseYMD = (s) => { const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); };
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const startOfMonth = (d)=> new Date(d.getFullYear(), d.getMonth(), 1);
+const endOfMonth   = (d)=> new Date(d.getFullYear(), d.getMonth()+1, 0);
+const addMonths    = (d, n)=> new Date(d.getFullYear(), d.getMonth()+n, 1);
+const cap = (s)=> s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
+
+/* ===== DOM ===== */
+// Tabs
+const tabDashboard = document.getElementById("tabDashboard");
+const tabCarga = document.getElementById("tabCarga");
+const viewDashboard = document.getElementById("viewDashboard");
+const viewCarga = document.getElementById("viewCarga");
+
+// Dashboard
+const rangeStart = document.getElementById("rangeStart");
+const rangeEnd   = document.getElementById("rangeEnd");
+const applyRangeBtn = document.getElementById("applyRangeBtn");
+const rangeHint = document.getElementById("rangeHint");
+const alertBox  = document.getElementById("alertBox");
+const alertText = document.getElementById("alertText");
+
+const kpiTotal  = document.getElementById("kpiTotal");
+const kpiTargets= document.getElementById("kpiTargets");
+const kpiAvgDay = document.getElementById("kpiAvgDay");
+const kpiAvgWeek= document.getElementById("kpiAvgWeek");
+const kpiCash   = document.getElementById("kpiCash");
+const kpiCard   = document.getElementById("kpiCard");
+const kpiTrans  = document.getElementById("kpiTrans");
+const kpiPlat   = document.getElementById("kpiPlat");
+
+const monthsTableBody = document.getElementById("monthsTableBody");
+const daysList   = document.getElementById("daysList");
+
+// --- Settings (modal) ---
+const btnOpenSettings    = document.getElementById("openSettings");
+const settingsOverlay    = document.getElementById("settings-overlay");
+const inpEquilibrio      = document.getElementById("inp-equilibrio");
+const inpGanancia        = document.getElementById("inp-ganancia");
+const btnSaveSettings    = document.getElementById("btn-save-settings");
+const btnCancelSettings  = document.getElementById("btn-cancel-settings");
+const settingsError      = document.getElementById("settings-error");
+
+// Metas en el tablero
+const kpiEquilibrio = document.getElementById("kpiEquilibrio");
+const kpiGanancia   = document.getElementById("kpiGanancia");
+
+
+// Carga
+const aDate   = document.getElementById("adm-date");
+const aEmp    = document.getElementById("adm-employee");
+const aCash   = document.getElementById("adm-cash");
+const aCard   = document.getElementById("adm-card");
+const aTrans  = document.getElementById("adm-transfer");
+const aPlat   = document.getElementById("adm-platforms");
+const aPrev   = document.getElementById("adm-total-preview");
+const aSave   = document.getElementById("adm-saveBtn");
+const aStatus = document.getElementById("adm-statusMsg");
+const aMissing= document.getElementById("adm-missing");
+
+// Gate
+const ov   = document.getElementById("gate-overlay");
+const pIn  = document.getElementById("gate-pass");
+const pBtn = document.getElementById("gate-submit");
+const pErr = document.getElementById("gate-error");
+
+/* ===== State ===== */
+let MONTHLY_TARGET = 30000000;
+let SURPLUS_TARGET = 0;
+let RANGE = { start: null, end: null };
+
+/* ===== Gate ===== */
 function showGate() {
-  const ov  = document.getElementById("gate-overlay");
-  const input = document.getElementById("gate-pass");
-  const btn = document.getElementById("gate-submit");
-  const err = document.getElementById("gate-error");
-  if (!ov || !input || !btn || !err) return;
+  if (!ov || !pIn || !pBtn || !pErr) return;
+  ov.hidden = false; ov.style.display = "grid";
+  pErr.textContent = "";
+  setTimeout(()=>pIn.focus(),50);
 
-  // Explicitly show (fix for CSS overriding [hidden])
-  ov.hidden = false;
-  ov.style.display = "grid";
-
-  async function handleSubmit() {
-    err.textContent = "";
-    const pass = (input.value || "").trim();
-    if (!pass) { input.focus(); return; }
+  async function handleSubmit(){
+    pErr.textContent = "";
+    const pass = (pIn.value||"").trim();
+    if (!pass) { pIn.focus(); return; }
 
     try {
       if (GATE_MODE === "supabase") {
-        if (!HAS_SUPABASE) throw new Error("Supabase not configured");
-        if (!ENV.MANAGER_EMAIL) throw new Error("MANAGER_EMAIL missing in env.js");
+        if (!HAS_SUPABASE) throw new Error("Supabase no está configurado");
         const sb = await ensureSupabase();
-        const { data, error } = await sb.auth.signInWithPassword({
-          email: ENV.MANAGER_EMAIL,
-          password: pass
-        });
+        const { data, error } = await sb.auth.signInWithPassword({ email: ADMIN_EMAIL, password: pass });
         if (error) throw error;
         signedInUser = data?.user ?? null;
       } else {
-        // Local hash-only gate
-        if (!ENV.PASS_HASH) throw new Error("PASS_HASH missing");
+        if (!ENV.PASS_HASH) throw new Error("Falta PASS_HASH");
         const hex = await sha256Hex(pass);
-        if (hex !== ENV.PASS_HASH) throw new Error("Invalid password");
-        signedInUser = null; // local-only
+        if (hex !== ENV.PASS_HASH) throw new Error("Contraseña incorrecta");
+        signedInUser = null;
       }
 
       setUnlocked(true);
-
-      // Explicitly hide (fix for CSS overriding [hidden])
-      ov.hidden = true;
-      ov.style.display = "none";
-
-      // important: blur to release iOS zoom focus, then reset scroll
-input.blur();
-setTimeout(() => { window.scrollTo(0, 0); }, 0);
-
+      hideGateOverlay();
+      pIn.blur(); setTimeout(()=>window.scrollTo(0,0),0);
       await afterUnlockInit();
     } catch (e) {
-      err.textContent = e.message || "Authentication failed";
-      input.select();
-      console.error("[Gate] unlock failed:", e);
+      pErr.textContent = e.message || "Error de autenticación";
+      pIn.select();
     }
   }
 
-  btn.onclick = handleSubmit;
-  input.onkeydown = (e) => { if (e.key === "Enter") handleSubmit(); };
-  setTimeout(() => input.focus(), 50);
+  pBtn.onclick = handleSubmit;
+  pIn.onkeydown = (e)=>{ if (e.key==="Enter") handleSubmit(); };
 }
 
-/* ===== After gate unlock: init page state ===== */
-async function afterUnlockInit() {
-  try {
-    if (GATE_MODE === "supabase" && HAS_SUPABASE) {
-      const sb = await ensureSupabase();
-      const { data: { user } } = await sb.auth.getUser();
-      signedInUser = signedInUser || user || null;
-    }
+/* ===== Data access ===== */
+async function fetchSettings(){
+  if (!supabase) return { owner_id: null, monthly_target: 30000000, surplus_target: 0 };
+  const { data } = await supabase
+    .from("app_settings")
+    .select("owner_id, monthly_target, surplus_target")
+    .limit(1).maybeSingle();
+  return {
+    owner_id: data?.owner_id || null,
+    monthly_target: (typeof data?.monthly_target === "number") ? data.monthly_target : 30000000,
+    surplus_target: (typeof data?.surplus_target === "number") ? data.surplus_target : 0,
+  };
+}
 
-    // Set default date if empty
-    if (elDate && !elDate.value) {
-      const d = new Date();
-      elDate.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-    }
+let APP_SETTINGS_OWNER_ID = null;
 
-    await refreshForSelectedDate();
 
-    // Nice footer hint when syncing to cloud
-    const footer = document.querySelector("footer.muted");
-    if (footer && provider.mode === "supabase") {
-      footer.textContent = "Toda la información es almacenada en la nube de manera segura y gratuita.";
-    }
-  } catch (err) {
-    console.error("[Init] failed:", err);
+
+async function fetchRangeLogs(s, e){
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("daily_logs")
+    .select("log_date, employee_name, cash, card, bank_transfer, platforms, total")
+    .gte("log_date", ymd(s))
+    .lte("log_date", ymd(e))
+    .order("log_date", { ascending:true });
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchMonths(lastN=6){
+  if (!supabase) return [];
+  const now = new Date();
+  const start = addMonths(startOfMonth(now), -lastN);
+  const end   = endOfMonth(now);
+  const rows = await fetchRangeLogs(start, end);
+
+  const map = new Map(); // YYYY-MM -> total
+  for (const r of rows) {
+    const d = parseYMD(r.log_date);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    map.set(key, (map.get(key)||0) + (Number(r.total)||0));
   }
+  return Array.from(map.entries()).sort((a,b)=> a[0] < b[0] ? -1 : 1);
+}
+
+/* ===== Dashboard render ===== */
+function setDefaultRangeToCurrentMonth(){
+  const now = new Date();
+  RANGE.start = startOfMonth(now);
+  RANGE.end   = endOfMonth(now);
+  if (rangeStart) rangeStart.value = ymd(RANGE.start);
+  if (rangeEnd)   rangeEnd.value   = ymd(RANGE.end);
+  if (rangeHint)  rangeHint.textContent = `${RANGE.start.toLocaleDateString("en-CA")} → ${RANGE.end.toLocaleDateString("en-CA")}`;
+}
+
+function renderDaysList(rows){
+  if (!daysList) return;
+  daysList.innerHTML = "";
+  if (!rows || rows.length === 0) {
+    const li = document.createElement("li");
+    li.className = "item"; li.innerHTML = "<small>No hay registros en este rango.</small>";
+    daysList.appendChild(li); return;
+  }
+  for (const r of rows) {
+    const li = document.createElement("li");
+    li.className = "item";
+
+    // Fecha con día de semana (español)
+    const d = parseYMD(r.log_date);
+    const label = cap(d.toLocaleDateString("es-CO", { weekday:"long", day:"2-digit", month:"2-digit", year:"numeric" }));
+
+    const left = document.createElement("div");
+    left.innerHTML = `<strong>${label}</strong><br><small>${fmtCOP(r.total)}</small>`;
+
+    const right = document.createElement("div");
+    right.style.display = "flex"; right.style.gap = "10px";
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "link"; editBtn.textContent = "Editar";
+    editBtn.onclick = () => {
+      showView("carga");
+      aDate.value = r.log_date;
+      aEmp.value  = r.employee_name || "";
+      aCash.value = Number(r.cash)||0;
+      aCard.value = Number(r.card)||0;
+      aTrans.value= Number(r.bank_transfer)||0;
+      aPlat.value = Number(r.platforms)||0;
+      updateAdmPreview();
+      // refrescar faltantes del mes de esa fecha
+      refreshMissingForCarga();
+      aCash.focus();
+    };
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "link"; delBtn.textContent = "Eliminar";
+    delBtn.onclick = async () => {
+      if (confirm(`Eliminar registro de ${label}?`)) {
+        const { error } = await supabase.from("daily_logs").delete().eq("log_date", r.log_date);
+        if (error) { alert(error.message || "Error al eliminar"); return; }
+        await refreshDashboard();
+        // Si estamos en CARGA y el mes coincide, refrescar faltantes
+        refreshMissingForCarga();
+      }
+    };
+
+    right.appendChild(editBtn);
+    right.appendChild(delBtn);
+    li.appendChild(left); li.appendChild(right);
+    daysList.appendChild(li);
+  }
+}
+
+function renderMonthsTable(months, target){
+  if (!monthsTableBody) return;
+  monthsTableBody.innerHTML = "";
+  if (!months || months.length === 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="4" class="muted" style="padding:8px 6px;">Sin datos</td>`;
+    monthsTableBody.appendChild(tr); return;
+  }
+  for (const [key, total] of months) {
+    const surplus = Math.max(0, total - target);
+    const dt = new Date(Number(key.split("-")[0]), Number(key.split("-")[1])-1, 1);
+    const label = dt.toLocaleDateString("es-CO", { month:"long", year:"numeric" });
+    const tr = document.createElement("tr");
+    tr.style.borderBottom = "1px solid var(--border)";
+    tr.innerHTML = `
+      <td style="padding:8px 6px;">${cap(label)}</td>
+      <td style="padding:8px 6px;">${fmtCOP(total)}</td>
+      <td style="padding:8px 6px;">${fmtCOP(target)}</td>
+      <td style="padding:8px 6px;">${fmtCOP(surplus)}</td>
+    `;
+    monthsTableBody.appendChild(tr);
+  }
+}
+
+function renderKPIs(rows, target){
+  const daysCount = rows.length;
+  const total = rows.reduce((a,r)=> a + (Number(r.total)||0), 0);
+  const avgDay = daysCount ? total / daysCount : 0;
+
+  // promedio/semana usando días naturales del rango
+  const firstDate = rows[0]?.log_date || ymd(RANGE.start);
+  const lastDate  = rows.at(-1)?.log_date || ymd(RANGE.end);
+  const rangeDays = Math.max(1, ((parseYMD(lastDate) - parseYMD(firstDate)) / (1000*60*60*24)) + 1);
+  const avgWeek = (total / rangeDays) * 7;
+
+  const sumCash = rows.reduce((a,r)=> a + (Number(r.cash)||0), 0);
+  const sumCard = rows.reduce((a,r)=> a + (Number(r.card)||0), 0);
+  const sumTrans= rows.reduce((a,r)=> a + (Number(r.bank_transfer)||0), 0);
+  const sumPlat = rows.reduce((a,r)=> a + (Number(r.platforms)||0), 0);
+
+  const pct = (v) => total ? Math.round((v/total)*100) : 0;
+
+  if (kpiTotal)   kpiTotal.textContent = fmtCOP(total);
+  if (kpiEquilibrio) kpiEquilibrio.textContent = fmtCOP(MONTHLY_TARGET);
+if (kpiGanancia)   kpiGanancia.textContent   = fmtCOP(SURPLUS_TARGET);
+
+  if (kpiAvgDay)  kpiAvgDay.textContent = fmtCOP(avgDay);
+  if (kpiAvgWeek) kpiAvgWeek.textContent = fmtCOP(avgWeek);
+
+  if (kpiCash) kpiCash.textContent = `${fmtCOP(sumCash)} (${pct(sumCash)}%)`;
+  if (kpiCard) kpiCard.textContent = `${fmtCOP(sumCard)} (${pct(sumCard)}%)`;
+  if (kpiTrans)kpiTrans.textContent= `${fmtCOP(sumTrans)} (${pct(sumTrans)}%)`;
+  if (kpiPlat) kpiPlat.textContent = `${fmtCOP(sumPlat)} (${pct(sumPlat)}%)`;
+
+  // Alerta del mes actual según meta de equilibrio
+  const now = new Date();
+  const inCurrentMonth = RANGE.start.getFullYear()===now.getFullYear() && RANGE.start.getMonth()===now.getMonth() &&
+                         RANGE.end.getFullYear()===now.getFullYear() && RANGE.end.getMonth()===now.getMonth();
+  if (inCurrentMonth) {
+    const first = startOfMonth(now), last = endOfMonth(now);
+    const daysPassed = ((now - first)/(1000*60*60*24) | 0) + 1;
+    const daysInMonth = last.getDate();
+    const daysLeft = daysInMonth - daysPassed;
+    const avgSoFar = daysCount ? total / daysCount : 0;
+    const projected = avgSoFar * daysInMonth;
+
+    if (daysLeft <= 5 && projected < MONTHLY_TARGET) {
+      alertBox.style.display = "block";
+      alertText.textContent = `Faltan ${daysLeft} día(s). Proyección del mes: ${fmtCOP(projected)} (${fmtCOP(MONTHLY_TARGET - projected)} por debajo de la meta).`;
+    } else {
+      alertBox.style.display = "none";
+      alertText.textContent = "";
+    }
+  } else {
+    alertBox.style.display = "none";
+    alertText.textContent = "";
+  }
+}
+
+async function refreshDashboard(){
+  let s = RANGE.start, e = RANGE.end;
+  if (!s || !e) setDefaultRangeToCurrentMonth();
+  s = RANGE.start; e = RANGE.end;
+
+  if (rangeHint) rangeHint.textContent = `${s.toLocaleDateString("en-CA")} → ${e.toLocaleDateString("en-CA")}`;
+
+  const rows = await fetchRangeLogs(s, e);
+  renderKPIs(rows, MONTHLY_TARGET);
+  renderDaysList(rows);
+
+  const months = await fetchMonths(6);
+  renderMonthsTable(months, MONTHLY_TARGET);
+}
+
+/* ===== Carga (admin) ===== */
+async function loadEmployees(){
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("employees")
+    .select("name")
+    .eq("is_active", true)
+    .order("name", { ascending:true });
+  if (error) throw error;
+  aEmp.innerHTML = '<option value="" disabled selected>Selecciona</option>';
+  for (const row of (data||[])) {
+    const opt = document.createElement("option");
+    opt.value = row.name; opt.textContent = row.name;
+    aEmp.appendChild(opt);
+  }
+}
+
+function updateAdmPreview(){
+  const total =
+    (Number(aCash.value)||0) + (Number(aCard.value)||0) +
+    (Number(aTrans.value)||0) + (Number(aPlat.value)||0);
+  aPrev.textContent = `Total: ${fmtCOP(total)}`;
+}
+
+async function saveAdminEntry(){
+  aStatus.textContent = "";
+  const body = {
+    log_date: aDate.value,
+    employee_name: aEmp.value,
+    cash: Math.max(0, Math.round(Number(aCash.value)||0)),
+    card: Math.max(0, Math.round(Number(aCard.value)||0)),
+    bank_transfer: Math.max(0, Math.round(Number(aTrans.value)||0)),
+    platforms: Math.max(0, Math.round(Number(aPlat.value)||0)),
+  };
+  if (!body.log_date) { aStatus.textContent = "Falta fecha"; aDate.focus(); return; }
+  if (!body.employee_name) { aStatus.textContent = "Selecciona empleado"; aEmp.focus(); return; }
+
+  aSave.disabled = true; aSave.textContent = "Guardando…";
+  try {
+    const { error } = await supabase.from("daily_logs").upsert(body, { onConflict: "log_date" });
+    if (error) throw error;
+    aStatus.textContent = "✅ Guardado";
+    await refreshDashboard();
+    await refreshMissingForCarga(); // actualizar faltantes
+  } catch (e) {
+    aStatus.textContent = `❌ ${e.message || "Error"}`;
+  } finally {
+    aSave.disabled = false; aSave.textContent = "Guardar";
+  }
+}
+
+/* Días faltantes del mes (excepto lunes) */
+async function refreshMissingForCarga(){
+  if (!aMissing) return;
+  const baseDate = aDate.value ? parseYMD(aDate.value) : new Date();
+  const mStart = startOfMonth(baseDate);
+  const mEnd   = endOfMonth(baseDate);
+
+  const rows = await fetchRangeLogs(mStart, mEnd);
+  const set = new Set(rows.map(r => r.log_date)); // YYYY-MM-DD con datos
+
+  const missing = [];
+  for (let day=1; day<=mEnd.getDate(); day++){
+    const d = new Date(mStart.getFullYear(), mStart.getMonth(), day);
+    const isMonday = d.getDay() === 1; // 1 = Lunes
+    const ds = ymd(d);
+    if (isMonday) continue;
+    if (!set.has(ds)) missing.push(ds);
+  }
+
+  aMissing.innerHTML = "";
+  if (missing.length === 0) {
+    aMissing.innerHTML = '<span class="muted">No hay días faltantes.</span>';
+    return;
+  }
+  for (const ds of missing) {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    const dd = parseYMD(ds);
+    chip.textContent = dd.getDate().toString().padStart(2,"0");
+    chip.title = cap(dd.toLocaleDateString("es-CO", { weekday:"long", day:"2-digit", month:"2-digit", year:"numeric" }));
+    chip.type = "button";
+    chip.onclick = () => { aDate.value = ds; aDate.dispatchEvent(new Event("change")); };
+    aMissing.appendChild(chip);
+  }
+}
+
+/* ===== Tabs ===== */
+function showView(name){
+  if (name==="dashboard") {
+    viewDashboard.style.display = "";
+    viewCarga.style.display = "none";
+    tabDashboard.classList.remove("secondary");
+    tabCarga.classList.add("secondary");
+  } else {
+    viewDashboard.style.display = "none";
+    viewCarga.style.display = "";
+    tabCarga.classList.remove("secondary");
+    tabDashboard.classList.add("secondary");
+    refreshMissingForCarga(); // actualizar faltantes al entrar
+  }
+}
+
+/* ===== After unlock ===== */
+async function afterUnlockInit(){
+  if (GATE_MODE === "supabase" && HAS_SUPABASE) {
+    const sb = await ensureSupabase();
+    const { data: { user } } = await sb.auth.getUser();
+    signedInUser = signedInUser || user || null;
+  }
+
+  // Targets
+const st = await fetchSettings();
+APP_SETTINGS_OWNER_ID = st.owner_id;
+MONTHLY_TARGET = st.monthly_target;
+SURPLUS_TARGET = st.surplus_target;
+
+  // Dashboard defaults
+  setDefaultRangeToCurrentMonth();
+  await refreshDashboard();
+
+  // Carga defaults
+  if (!aDate.value) aDate.value = todayLocal();
+  await loadEmployees();
+  updateAdmPreview();
+  await refreshMissingForCarga();
+
+  // Listeners
+  applyRangeBtn.addEventListener("click", async ()=>{
+    const s = rangeStart.value, e = rangeEnd.value;
+    if (s && e) {
+      RANGE.start = parseYMD(s); RANGE.end = parseYMD(e);
+      await refreshDashboard();
+    }
+  });
+  tabDashboard.addEventListener("click", ()=> showView("dashboard"));
+  tabCarga.addEventListener("click", ()=> showView("carga"));
+
+  [aCash,aCard,aTrans,aPlat].forEach(el=> el.addEventListener("input", updateAdmPreview));
+  aDate.addEventListener("change", refreshMissingForCarga);
+  aSave.addEventListener("click", saveAdminEntry);
+
+  showView("dashboard");
+
+  // --- Settings modal ---
+function openSettings(){
+  settingsError.textContent = "";
+  inpEquilibrio.value = String(MONTHLY_TARGET || 0);
+  inpGanancia.value   = String(SURPLUS_TARGET || 0);
+  settingsOverlay.hidden = false;
+  settingsOverlay.style.display = "grid";
+  setTimeout(()=>inpEquilibrio.focus(), 20);
+}
+function closeSettings(){
+  settingsOverlay.hidden = true;
+  settingsOverlay.style.display = "none";
+}
+
+async function saveSettings(){
+  settingsError.textContent = "";
+  const mt = Math.max(0, Math.round(Number(inpEquilibrio.value || 0)));
+  const st = Math.max(0, Math.round(Number(inpGanancia.value   || 0)));
+
+  if (!APP_SETTINGS_OWNER_ID){
+    settingsError.textContent = "No se encontró app_settings en la base de datos.";
+    return;
+  }
+  btnSaveSettings.disabled = true; btnSaveSettings.textContent = "Guardando…";
+  try{
+    const { error } = await supabase
+      .from("app_settings")
+      .update({ monthly_target: mt, surplus_target: st })
+      .eq("owner_id", APP_SETTINGS_OWNER_ID);
+    if (error) throw error;
+
+    // Actualiza estado y UI
+    MONTHLY_TARGET = mt;
+    SURPLUS_TARGET = st;
+    if (kpiEquilibrio) kpiEquilibrio.textContent = fmtCOP(MONTHLY_TARGET);
+    if (kpiGanancia)   kpiGanancia.textContent   = fmtCOP(SURPLUS_TARGET);
+    await refreshDashboard();
+    closeSettings();
+  }catch(e){
+    settingsError.textContent = e.message || "Error al guardar";
+  }finally{
+    btnSaveSettings.disabled = false; btnSaveSettings.textContent = "Guardar";
+  }
+}
+
+btnOpenSettings?.addEventListener("click", openSettings);
+btnCancelSettings?.addEventListener("click", closeSettings);
+btnSaveSettings?.addEventListener("click", saveSettings);
+settingsOverlay?.addEventListener("click", (e)=>{ if (e.target === settingsOverlay) closeSettings(); });
+
 }
 
 /* ===== Boot ===== */
-(async function boot() {
+(async function boot(){
   try {
     if (GATE_MODE === "supabase") {
       await ensureSupabase();
@@ -133,6 +560,7 @@ async function afterUnlockInit() {
       signedInUser = user ?? null;
     }
     if (isUnlocked()) {
+      hideGateOverlay();
       await afterUnlockInit();
     } else {
       showGate();
@@ -142,260 +570,3 @@ async function afterUnlockInit() {
     showGate();
   }
 })();
-
-/* ===== Formatting & date utilities ===== */
-const COP = new Intl.NumberFormat("es-CO", {
-  style: "currency",
-  currency: "COP",
-  maximumFractionDigits: 0
-});
-const fmtCOP = (n) => COP.format(Math.max(0, Math.round(Number(n) || 0)));
-
-const todayLocalYYYYMMDD = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-};
-const parseYYYYMMDD = (str) => {
-  const [y, m, d] = str.split("-").map(Number);
-  return new Date(y, m - 1, d);
-};
-const yearMonthKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
-const endOfMonth   = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
-const ymdLocal = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-function weekBounds(date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dow = d.getDay();               // 0=Sun, 1=Mon…
-  const diffToMon = (dow + 6) % 7;      // Sun->6, Mon->0…
-  const monday = new Date(d); monday.setDate(d.getDate() - diffToMon);
-  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-  return [monday, sunday];
-}
-const inRange = (date, a, b) => +date >= +a && +date <= +b;
-
-/* ===== Local cache (always available + offline) ===== */
-const LOCAL_KEY = "rm_dailyLogs";
-function loadLocal() { try { const raw = localStorage.getItem(LOCAL_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
-function saveLocal(obj) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(obj)); } catch {} }
-
-/* ===== Data provider (cloud if signed in, else local) ===== */
-const provider = {
-  get mode() {
-    return (GATE_MODE === "supabase" && supabase && signedInUser) ? "supabase" : "local";
-  },
-  monthCache: {},
-
-  async hydrateMonth(selectedDate) {
-    const yKey = yearMonthKey(selectedDate);
-    this.monthCache = {};
-
-    if (this.mode === "supabase") {
-      const mStart = ymdLocal(startOfMonth(selectedDate));
-      const mEnd   = ymdLocal(endOfMonth(selectedDate));
-      const { data, error } = await supabase
-        .from("daily_logs")
-        .select("log_date, sales")
-        .gte("log_date", mStart)
-        .lte("log_date", mEnd)
-        .order("log_date", { ascending: true });
-      if (error) throw error;
-
-      (data || []).forEach(r => { this.monthCache[r.log_date] = Number(r.sales) || 0; });
-
-      // Mirror to local for offline UX
-      const local = loadLocal();
-      for (const [k, v] of Object.entries(this.monthCache)) local[k] = v;
-      saveLocal(local);
-    } else {
-      const all = loadLocal();
-      for (const [k, v] of Object.entries(all)) {
-        if (yearMonthKey(parseYYYYMMDD(k)) === yKey) this.monthCache[k] = Number(v) || 0;
-      }
-    }
-  },
-
-  async listBetween(startDate, endDate) {
-    if (this.mode === "supabase") {
-      const s = ymdLocal(startDate);
-      const e = ymdLocal(endDate);
-      const { data, error } = await supabase
-        .from("daily_logs")
-        .select("log_date, sales")
-        .gte("log_date", s)
-        .lte("log_date", e)
-        .order("log_date", { ascending: true });
-      if (error) throw error;
-      return (data || []).map(r => ({ dateStr: r.log_date, sales: Number(r.sales) || 0 }));
-    } else {
-      const all = loadLocal();
-      const out = [];
-      for (const [k, v] of Object.entries(all)) {
-        const d = parseYYYYMMDD(k);
-        if (inRange(d, startDate, endDate)) out.push({ dateStr: k, sales: Number(v) || 0 });
-      }
-      out.sort((a,b) => a.dateStr < b.dateStr ? -1 : 1);
-      return out;
-    }
-  },
-
-  async upsert(dateStr, sales) {
-    if (this.mode === "supabase") {
-      const { error } = await supabase
-        .from("daily_logs")
-        .upsert({ log_date: dateStr, sales }, { onConflict: "user_id,log_date" });
-      if (error) throw error;
-    }
-    const local = loadLocal();
-    local[dateStr] = sales;
-    saveLocal(local);
-    this.monthCache[dateStr] = sales;
-  },
-
-  async remove(dateStr) {
-    if (this.mode === "supabase") {
-      const { error } = await supabase
-        .from("daily_logs")
-        .delete()
-        .eq("log_date", dateStr);
-      if (error) throw error;
-    }
-    const local = loadLocal();
-    delete local[dateStr];
-    saveLocal(local);
-    delete this.monthCache[dateStr];
-  }
-};
-
-/* ===== DOM ===== */
-const elDate        = document.getElementById("date");
-const elSales       = document.getElementById("sales");
-const elPreview     = document.getElementById("salesPreview");
-const elSave        = document.getElementById("saveBtn");
-const elClear       = document.getElementById("clearBtn"); // optional
-const elWeekTotal   = document.getElementById("weekTotal");
-const elWeekRange   = document.getElementById("weekRange");
-const elMonthTotal  = document.getElementById("monthTotal");
-const elMonthLabel  = document.getElementById("monthLabel");
-const elMissing     = document.getElementById("missing");
-const elSurplusNote = document.getElementById("surplusNote");
-const elDaysList    = document.getElementById("daysList");
-
-/* ===== KPIs + List rendering ===== */
-async function refreshForSelectedDate() {
-  const dateStr  = elDate?.value || todayLocalYYYYMMDD();
-  const selected = parseYYYYMMDD(dateStr);
-
-  await provider.hydrateMonth(selected);
-
-  const [wStart, wEnd] = weekBounds(selected);
-  const weekLogs = await provider.listBetween(wStart, wEnd);
-  const weekSum = weekLogs.reduce((a,r) => a + r.sales, 0);
-  if (elWeekTotal) elWeekTotal.textContent = fmtCOP(weekSum);
-  if (elWeekRange) elWeekRange.textContent = `${wStart.toLocaleDateString("en-CA")} → ${wEnd.toLocaleDateString("en-CA")}`;
-
-  const mStart = startOfMonth(selected);
-  const mEnd   = endOfMonth(selected);
-  const monthLogs = await provider.listBetween(mStart, mEnd);
-  const monthSum = monthLogs.reduce((a,r) => a + r.sales, 0);
-  if (elMonthTotal) elMonthTotal.textContent = fmtCOP(monthSum);
-  if (elMonthLabel) elMonthLabel.textContent = selected.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-
-  const target = 48000000;
-  const missing = Math.max(0, target - monthSum);
-  if (elMissing) elMissing.textContent = fmtCOP(missing);
-  if (elSurplusNote) elSurplusNote.textContent = monthSum > target ? `Goal reached. Surplus: ${fmtCOP(monthSum - target)}` : "";
-
-  renderMonthList(selected, provider.monthCache);
-
-  const existing = provider.monthCache[dateStr];
-  if (elSales) elSales.value = existing != null ? Number(existing) : "";
-  if (elPreview) elPreview.textContent = `Formatted: ${fmtCOP(elSales?.value || 0)}`;
-}
-
-function renderMonthList(selected, store) {
-  const mKey = yearMonthKey(selected);
-  const items = Object.entries(store)
-    .filter(([k]) => yearMonthKey(parseYYYYMMDD(k)) === mKey)
-    .sort((a,b) => a[0] < b[0] ? -1 : 1);
-
-  if (!elDaysList) return;
-  elDaysList.innerHTML = "";
-  if (items.length === 0) {
-    const li = document.createElement("li");
-    li.className = "item";
-    li.innerHTML = "<small>No entries yet for this month.</small>";
-    elDaysList.appendChild(li);
-    return;
-  }
-
-  for (const [k, v] of items) {
-    const li = document.createElement("li");
-    li.className = "item";
-
-    const left = document.createElement("div");
-    left.innerHTML = `<strong>${k}</strong><br><small>${fmtCOP(v)}</small>`;
-
-    const right = document.createElement("div");
-    right.style.display = "flex"; right.style.gap = "10px";
-
-    const editBtn = document.createElement("button");
-    editBtn.className = "link"; editBtn.textContent = "Edit";
-    editBtn.onclick = () => {
-      if (elDate) elDate.value = k;
-      if (elSales) elSales.value = Number(v);
-      if (elSales) elSales.dispatchEvent(new Event("input"));
-      refreshForSelectedDate();
-    };
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "link"; delBtn.textContent = "Delete";
-    delBtn.onclick = async () => {
-      if (confirm(`Delete entry for ${k}?`)) {
-        await provider.remove(k);
-        await refreshForSelectedDate();
-      }
-    };
-
-    right.appendChild(editBtn);
-    right.appendChild(delBtn);
-    li.appendChild(left);
-    li.appendChild(right);
-    elDaysList.appendChild(li);
-  }
-}
-
-/* ===== Events (guard every binding) ===== */
-if (elSales) {
-  elSales.addEventListener("input", () => {
-    if (elPreview) elPreview.textContent = `Formatted: ${fmtCOP(elSales.value || 0)}`;
-  });
-}
-if (elDate) {
-  elDate.addEventListener("change", () => { refreshForSelectedDate(); });
-}
-if (elSave) {
-  elSave.addEventListener("click", async () => {
-    const dateStr = elDate?.value;
-    const amt = Math.round(Number(elSales?.value));
-    if (!dateStr) { alert("Please select a date."); elDate?.focus(); return; }
-    if (!(amt >= 0)) { alert("Please enter a valid non-negative amount."); elSales?.focus(); return; }
-    await provider.upsert(dateStr, amt);
-    await refreshForSelectedDate();
-  });
-}
-if (elClear) {
-  elClear.addEventListener("click", async () => {
-    if (provider.mode === "supabase") {
-      if (confirm("Clear local cache only? (Your cloud data stays intact)")) {
-        localStorage.removeItem(LOCAL_KEY);
-        await refreshForSelectedDate();
-      }
-    } else {
-      if (confirm("This will remove ALL saved data in this browser. Continue?")) {
-        localStorage.removeItem(LOCAL_KEY);
-        await refreshForSelectedDate();
-      }
-    }
-  });
-}
-
