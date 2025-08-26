@@ -300,7 +300,7 @@ async function refreshForSelectedDate() {
   if (elMonthTotal) elMonthTotal.textContent = fmtCOP(monthSum);
   if (elMonthLabel) elMonthLabel.textContent = selected.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
-  const target = 30000000;
+  const target = 48000000;
   const missing = Math.max(0, target - monthSum);
   if (elMissing) elMissing.textContent = fmtCOP(missing);
   if (elSurplusNote) elSurplusNote.textContent = monthSum > target ? `Goal reached. Surplus: ${fmtCOP(monthSum - target)}` : "";
