@@ -200,7 +200,7 @@ let MONTHLY_TARGET = 30000000;
 let SURPLUS_TARGET = 0;
 let RANGE = { start: null, end: null };
 // Algoritmo de retiro (conservador)
-const RENT_COP = 6000000; // arriendo
+const RENT_COP = 6500000; // arriendo
 const PAYOUT_PARAMS = {
   M_days: 3,        // colchón de días operativos del próximo mes
   sigma: 0.02,       // margen extra sobre costos variables
