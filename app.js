@@ -77,6 +77,48 @@ const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
 const endOfMonth = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
 const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+// yyyy-mm-01 del mes de una fecha
+const monthFirstYMD = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`;
+
+// Último día del mes en YMD
+const monthLastYMD = (d) => ymd(endOfMonth(d));
+
+/**
+ * Calcula el retiro sugerido al FIN DE MES
+ * rows: registros daily_logs del mes seleccionado
+ * cashEnd: caja al cierre (int o null)
+ * C: costo mensual equilibrio (usa MONTHLY_TARGET)
+ * params: { M_days, sigma, alphaFactor }
+ */
+function computeSuggestedPayout(rows, cashEnd, C, params){
+  if (cashEnd == null) return null; // sin caja no recomendamos
+  const D = endOfMonth(RANGE.start).getDate();
+  const R = RENT_COP;
+  const M = params.M_days;
+  const sigma = params.sigma;
+const alpha = Math.max(0, Math.round(params.alphaFixed || 0));
+
+  const S = rows.reduce((a,r)=> a + (Number(r.total)||0), 0); // ventas reales del mes
+  const surplus = Math.max(0, S - C);
+
+  const var_d = Math.max(0, (C - R) / D); // costo variable diario
+  const reserva = Math.round(R + M*var_d + sigma*(C - R));
+
+  const disp_caja = Math.max(0, cashEnd - reserva);
+
+  const max_idle_cash = reserva + alpha;
+  const extra_caja = Math.max(0, cashEnd - max_idle_cash);
+
+  const base = Math.min(disp_caja, surplus);
+  const extra = Math.max(0, Math.min(disp_caja, base + extra_caja) - base);
+
+  const retiro = Math.min(disp_caja, base + extra);
+  // Redondeo práctico a $100.000
+  return Math.floor(retiro / 100000) * 100000;
+}
+
+
 
 /* ===== DOM ===== */
 // Tabs
@@ -101,6 +143,23 @@ const kpiCash = document.getElementById("kpiCash");
 const kpiCard = document.getElementById("kpiCard");
 const kpiTrans = document.getElementById("kpiTrans");
 const kpiPlat = document.getElementById("kpiPlat");
+
+// Progreso (barras)
+const pbEq          = document.getElementById("pbEq");
+const pbProfit      = document.getElementById("pbProfit");
+const pbEqLabel     = document.getElementById("pbEqLabel");
+const pbProfitLabel = document.getElementById("pbProfitLabel");
+const profitBlock   = document.getElementById("profitBlock");
+
+
+// KPI: retiro sugerido
+const kpiPayoutSuggested = document.getElementById("kpiPayoutSuggested");
+
+// Settings: Cierre de mes (cash_end)
+const inpClosingDate   = document.getElementById("inp-closing-date");
+const inpCashEnd       = document.getElementById("inp-cash-end");
+const btnSaveCashEnd   = document.getElementById("btn-save-cash-end");
+
 
 const monthsTableBody = document.getElementById("monthsTableBody");
 const daysList = document.getElementById("daysList");
@@ -140,6 +199,16 @@ const pErr = document.getElementById("gate-error");
 let MONTHLY_TARGET = 30000000;
 let SURPLUS_TARGET = 0;
 let RANGE = { start: null, end: null };
+// Algoritmo de retiro (conservador)
+const RENT_COP = 6000000; // arriendo
+const PAYOUT_PARAMS = {
+  M_days: 3,        // colchón de días operativos del próximo mes
+  sigma: 0.02,       // margen extra sobre costos variables
+  alphaFixed: 1000000, // caja cómoda adicional = 25% de C
+};
+
+let CURRENT_CASH_END = null; // caja al cierre del mes seleccionado (si hay)
+
 
 /* ===== Gate ===== */
 function showGate() {
@@ -243,6 +312,37 @@ async function fetchMonths(lastN = 6) {
   }
   return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? -1 : 1));
 }
+
+// Lee cash_end del cierre del mes (si existe)
+async function fetchCashEndForMonth(baseDate){
+  if (!supabase) return null;
+  const first = startOfMonth(baseDate);
+  const mk = monthFirstYMD(first);
+  const { data, error } = await supabase
+    .from("month_end_closings")
+    .select("cash_end, month_end, month_key")
+    .eq("month_key", mk)
+    .maybeSingle();
+  if (error) {
+    console.warn("[cash_end] fetch error:", error);
+    return null;
+  }
+  return (data && typeof data.cash_end === "number") ? data.cash_end : null;
+}
+
+// Guarda/actualiza cash_end usando la función RPC (upsert)
+async function upsertCashEndForMonth(baseDate, cashEnd, notes=null){
+  const first = startOfMonth(baseDate);
+  const p_month = ymd(first); // la RPC espera "cualquier día del mes"
+  const { data, error } = await supabase.rpc('upsert_month_end_closing', {
+    p_month,
+    p_cash_end: Math.max(0, Math.round(Number(cashEnd)||0)),
+    p_notes: notes
+  });
+  if (error) throw error;
+  return data;
+}
+
 
 /* ===== Dashboard render ===== */
 function setDefaultRangeToCurrentMonth() {
@@ -433,24 +533,66 @@ function renderKPIs(rows, target) {
 }
 
 async function refreshDashboard() {
-  let s = RANGE.start,
-    e = RANGE.end;
+  let s = RANGE.start, e = RANGE.end;
   if (!s || !e) setDefaultRangeToCurrentMonth();
-  s = RANGE.start;
-  e = RANGE.end;
+  s = RANGE.start; e = RANGE.end;
 
   if (rangeHint)
-    rangeHint.textContent = `${s.toLocaleDateString(
-      "en-CA"
-    )} → ${e.toLocaleDateString("en-CA")}`;
+    rangeHint.textContent = `${s.toLocaleDateString("en-CA")} → ${e.toLocaleDateString("en-CA")}`;
 
+  // 1) Datos del mes
   const rows = await fetchRangeLogs(s, e);
+
+  // 2) KPI básicos
   renderKPIs(rows, MONTHLY_TARGET);
   renderDaysList(rows);
 
+  // --- Progreso de metas (rango seleccionado) ---
+try {
+  const total = rows.reduce((a, r) => a + (Number(r.total) || 0), 0);
+
+  // Equilibrio
+  const eqTarget = Math.max(0, Number(MONTHLY_TARGET) || 0);
+  const eqPct = eqTarget > 0 ? Math.min(100, Math.round((total / eqTarget) * 100)) : 0;
+  if (pbEq) pbEq.style.width = eqPct + "%";
+  if (pbEqLabel) pbEqLabel.textContent = `${fmtCOP(total)} / ${fmtCOP(eqTarget)} (${eqPct}%)`;
+
+  // Ganancia (surplus = total - equilibrio)
+  const profitTarget = Math.max(0, Number(SURPLUS_TARGET) || 0);
+  const surplus = Math.max(0, total - eqTarget);
+
+  if (profitTarget > 0) {
+    const pfPct = Math.min(100, Math.round((surplus / profitTarget) * 100));
+    if (profitBlock) profitBlock.style.display = "";
+    if (pbProfit) pbProfit.style.width = pfPct + "%";
+    if (pbProfitLabel) pbProfitLabel.textContent = `${fmtCOP(surplus)} / ${fmtCOP(profitTarget)} (${pfPct}%)`;
+  } else {
+    // Si no hay meta de ganancia configurada, ocultamos el bloque para evitar confusión
+    if (profitBlock) profitBlock.style.display = "none";
+  }
+} catch (err) {
+  console.warn("[progress bars] render error:", err);
+}
+
+
+  // 3) Meses (tabla)
   const months = await fetchMonths(6);
   renderMonthsTable(months, MONTHLY_TARGET);
+
+  // 4) cash_end y Retiro sugerido
+  CURRENT_CASH_END = await fetchCashEndForMonth(s);
+  if (kpiPayoutSuggested) {
+    if (CURRENT_CASH_END == null) {
+      kpiPayoutSuggested.textContent = "—";
+      kpiPayoutSuggested.title = "Ingresa la caja al cierre en ⚙️ Configurar";
+    } else {
+      const suggested = computeSuggestedPayout(rows, CURRENT_CASH_END, MONTHLY_TARGET, PAYOUT_PARAMS);
+      kpiPayoutSuggested.textContent = fmtCOP(suggested || 0);
+      kpiPayoutSuggested.title = `Caja cierre: ${fmtCOP(CURRENT_CASH_END)}`;
+    }
+  }
 }
+
 
 /* ===== Carga (admin) ===== */
 async function loadEmployees() {
@@ -614,6 +756,8 @@ async function afterUnlockInit() {
       RANGE.start = parseYMD(s);
       RANGE.end = parseYMD(e);
       await refreshDashboard();
+      fillClosingDateAndCash(); // mantiene la fecha de cierre prellenada para el nuevo mes
+
     }
   });
   tabDashboard.addEventListener("click", () => showView("dashboard"));
@@ -628,14 +772,16 @@ async function afterUnlockInit() {
   showView("dashboard");
 
   // --- Settings modal ---
-  function openSettings() {
-    settingsError.textContent = "";
-    inpEquilibrio.value = String(MONTHLY_TARGET || 0);
-    inpGanancia.value = String(SURPLUS_TARGET || 0);
-    settingsOverlay.hidden = false;
-    settingsOverlay.style.display = "grid";
-    setTimeout(() => inpEquilibrio.focus(), 20);
-  }
+function openSettings() {
+  settingsError.textContent = "";
+  inpEquilibrio.value = String(MONTHLY_TARGET || 0);
+  inpGanancia.value   = String(SURPLUS_TARGET || 0);
+  fillClosingDateAndCash();
+  settingsOverlay.hidden = false;
+  settingsOverlay.style.display = "grid";
+  setTimeout(() => inpEquilibrio.focus(), 20);
+}
+
   function closeSettings() {
     settingsOverlay.hidden = true;
     settingsOverlay.style.display = "none";
@@ -674,6 +820,39 @@ async function afterUnlockInit() {
       btnSaveSettings.textContent = "Guardar";
     }
   }
+
+  // ---- Cierre de mes (cash_end) ----
+function fillClosingDateAndCash(){
+  // último día del mes del RANGO seleccionado
+  const last = endOfMonth(RANGE.start);
+  if (inpClosingDate) inpClosingDate.value = ymd(last);
+  if (inpCashEnd) {
+    inpCashEnd.value = (CURRENT_CASH_END != null) ? String(CURRENT_CASH_END) : "";
+    inpCashEnd.placeholder = "0";
+  }
+}
+
+async function saveCashEnd(){
+  settingsError.textContent = "";
+  const val = Math.max(0, Math.round(Number(inpCashEnd.value || 0)));
+  if (Number.isNaN(val)) {
+    settingsError.textContent = "Ingresa un valor numérico válido para caja.";
+    return;
+  }
+  try {
+    btnSaveCashEnd.disabled = true; btnSaveCashEnd.textContent = "Guardando…";
+    await upsertCashEndForMonth(RANGE.start, val, null);
+    CURRENT_CASH_END = val;
+    await refreshDashboard(); // recalcula KPI sugerido
+    settingsError.textContent = "✅ Caja guardada";
+  } catch (e) {
+    settingsError.textContent = e.message || "Error al guardar";
+  } finally {
+    btnSaveCashEnd.disabled = false; btnSaveCashEnd.textContent = "Guardar caja";
+  }
+}
+
+btnSaveCashEnd?.addEventListener("click", saveCashEnd);
 
   btnOpenSettings?.addEventListener("click", openSettings);
   btnCancelSettings?.addEventListener("click", closeSettings);
