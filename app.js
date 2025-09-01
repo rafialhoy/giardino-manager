@@ -85,37 +85,25 @@ const monthFirstYMD = (d) =>
 const monthLastYMD = (d) => ymd(endOfMonth(d));
 
 /**
- * Calcula el retiro sugerido al FIN DE MES
- * rows: registros daily_logs del mes seleccionado
- * cashEnd: caja al cierre (int o null)
- * C: costo mensual equilibrio (usa MONTHLY_TARGET)
- * params: { M_days, sigma, alphaFactor }
+ * Retiro sugerido al FIN DE MES = floor( max(0, cashEnd - (reserva + alpha)) / 100000 ) * 100000
+ * - Ignora "surplus" del mes; asumimos que la ganancia ya está dentro de la caja.
+ * - reserva = R + M * var_d + sigma * (C - R)
+ * - var_d = (C - R) / D
  */
-function computeSuggestedPayout(rows, cashEnd, C, params){
+function computeSuggestedPayout(rows, cashEnd, C, params) {
   if (cashEnd == null) return null; // sin caja no recomendamos
+
   const D = endOfMonth(RANGE.start).getDate();
-  const R = RENT_COP;
-  const M = params.M_days;
-  const sigma = params.sigma;
-const alpha = Math.max(0, Math.round(params.alphaFixed || 0));
+  const R = RENT_COP;               // arriendo (6.5M)
+  const M = params.M_days;          // días de colchón (3)
+  const sigma = params.sigma;       // margen extra (0.02)
+  const alpha = Math.max(0, Math.round(params.alphaFixed || 0)); // caja cómoda fija (1M)
 
-  const S = rows.reduce((a,r)=> a + (Number(r.total)||0), 0); // ventas reales del mes
-  const surplus = Math.max(0, S - C);
+  const var_d = Math.max(0, (C - R) / D);                 // costo variable diario
+  const reserva = Math.round(R + M * var_d + sigma * (C - R));
 
-  const var_d = Math.max(0, (C - R) / D); // costo variable diario
-  const reserva = Math.round(R + M*var_d + sigma*(C - R));
-
-  const disp_caja = Math.max(0, cashEnd - reserva);
-
-  const max_idle_cash = reserva + alpha;
-  const extra_caja = Math.max(0, cashEnd - max_idle_cash);
-
-  const base = Math.min(disp_caja, surplus);
-  const extra = Math.max(0, Math.min(disp_caja, base + extra_caja) - base);
-
-  const retiro = Math.min(disp_caja, base + extra);
-  // Redondeo práctico a $100.000
-  return Math.floor(retiro / 100000) * 100000;
+  const libre = Math.max(0, cashEnd - (reserva + alpha)); // caja por encima de reserva + alpha
+  return Math.floor(libre / 100000) * 100000;             // redondeo a $100.000
 }
 
 
@@ -159,6 +147,11 @@ const kpiPayoutSuggested = document.getElementById("kpiPayoutSuggested");
 const inpClosingDate   = document.getElementById("inp-closing-date");
 const inpCashEnd       = document.getElementById("inp-cash-end");
 const btnSaveCashEnd   = document.getElementById("btn-save-cash-end");
+
+// Info modal (retiro sugerido)
+const btnPayoutInfo       = document.getElementById("btnPayoutInfo");
+const payoutInfoOverlay   = document.getElementById("payout-info-overlay");
+const btnClosePayoutInfo  = document.getElementById("btn-close-payout-info");
 
 
 const monthsTableBody = document.getElementById("monthsTableBody");
@@ -832,6 +825,20 @@ function fillClosingDateAndCash(){
   }
 }
 
+// Modal info: abrir/cerrar
+function openPayoutInfo(){
+  payoutInfoOverlay.hidden = false;
+  payoutInfoOverlay.style.display = "grid";
+}
+function closePayoutInfo(){
+  payoutInfoOverlay.hidden = true;
+  payoutInfoOverlay.style.display = "none";
+}
+btnPayoutInfo?.addEventListener("click", openPayoutInfo);
+btnClosePayoutInfo?.addEventListener("click", closePayoutInfo);
+payoutInfoOverlay?.addEventListener("click", (e)=>{ if (e.target === payoutInfoOverlay) closePayoutInfo(); });
+
+
 async function saveCashEnd(){
   settingsError.textContent = "";
   const val = Math.max(0, Math.round(Number(inpCashEnd.value || 0)));
@@ -860,6 +867,8 @@ btnSaveCashEnd?.addEventListener("click", saveCashEnd);
   settingsOverlay?.addEventListener("click", (e) => {
     if (e.target === settingsOverlay) closeSettings();
   });
+
+  
 }
 
 /* ===== Boot ===== */

@@ -429,3 +429,14 @@ footer.muted {
 }
 
 
+/* Título + botón info dentro del KPI */
+.kpi-title-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.icon-info{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:25px; height:25px; border-radius:100%;
+  border:1px solid var(--border);  background: #f6f8f2;
+  color: var(--brand-olive); cursor:pointer;
+  font-weight:700; font-size:14px; line-height:1;
+  padding: 0px;
+}
+.icon-info:hover{ filter:brightness(0.98); }
